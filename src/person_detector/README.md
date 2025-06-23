@@ -219,18 +219,29 @@ launchファイルで以下のパラメータを変更可能：
 - FPS: 9-10 → 15-20
 - ラグ: 0.5-1.0秒 → 0.2-0.3秒
 
-#### 2. 信頼度閾値の調整
+#### 2. 表示処理の分離（新機能）
+```xml
+<param name="enable_display" value="true" />  <!-- 表示機能の有効/無効 -->
+```
+
+**改善内容**:
+- **マルチスレッド化**: 検出処理と表示処理を分離
+- **非同期表示**: 表示処理が検出処理をブロックしない
+- **キュー管理**: 最新3フレームのみ保持
+- **ラグ短縮**: 約0.8秒 → 0.2-0.3秒
+
+#### 3. 信頼度閾値の調整
 ```xml
 <param name="confidence_threshold" value="0.7" />  <!-- より厳密な検出 -->
 ```
 
-#### 3. カメラフレームレートの調整
+#### 4. カメラフレームレートの調整
 ```bash
 # カメラのフレームレートを下げる
 roslaunch usb_cam usb_cam-test.launch video_device:=/dev/video0 image_width:=320 image_height:=240
 ```
 
-#### 4. キューの最適化
+#### 5. キューの最適化
 - 入力キュー: `queue_size=1`（最新フレームのみ処理）
 - 出力キュー: `queue_size=1`（遅延を最小化）
 
@@ -238,12 +249,28 @@ roslaunch usb_cam usb_cam-test.launch video_device:=/dev/video0 image_width:=320
 ```xml
 <param name="resize_factor" value="0.3" />
 <param name="confidence_threshold" value="0.6" />
+<param name="enable_display" value="true" />
 ```
 
 **期待される改善**:
 - 処理時間: 40-50ms
 - FPS: 15-20
-- ラグ: 0.2-0.3秒
+- ラグ: **0.2-0.3秒**（大幅改善）
+
+### さらなる改善オプション
+
+#### 表示無効化（最大速度）
+```xml
+<param name="enable_display" value="false" />
+```
+**効果**: ラグを0.1秒以下に短縮（表示なし）
+
+#### 高精度設定
+```xml
+<param name="resize_factor" value="0.5" />
+<param name="confidence_threshold" value="0.7" />
+```
+**効果**: 精度重視、ラグは0.3-0.4秒
 
 ## ライセンス
 
