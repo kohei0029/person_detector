@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- 人物検出ノードの起動 -->
+    <node name="person_detector_node" pkg="person_detector" type="person_detector_node.py" output="screen">
+        <!-- パラメータ設定 -->
+        <param name="input_topic" value="/usb_cam/image_raw" />
+        <param name="output_topic" value="/detected_person/center_point" />
+        <param name="confidence_threshold" value="0.5" />
+        <param name="resize_factor" value="0.5" />  <!-- 画像サイズ縮小係数（0.5 = 50%） -->
+    </node>
+</launch> 

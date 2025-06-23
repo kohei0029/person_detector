@@ -49,3 +49,34 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
+
+# Additional exclusions
+.vscode/
+*.log
+*.tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# YOLOv5 model files (large files)
+*.pt
+*.pth
+*.weights
+
+# YOLOv5 repository (external dependency)
+src/yolov5/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment files
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
