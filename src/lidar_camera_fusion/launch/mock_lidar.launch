@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ダミーLiDARデータ生成ノード -->
+  <node name="mock_lidar_publisher" pkg="lidar_camera_fusion" type="mock_lidar_publisher.py" output="screen">
+    <!-- 人物の位置パラメータ（必要に応じて変更可能） -->
+    <param name="person_x" value="2.0" />
+    <param name="person_y" value="0.0" />
+    <param name="person_z" value="0.8" />
+    <param name="person_radius" value="0.3" />
+    <param name="num_points" value="50" />
+    <param name="publish_rate" value="10.0" />
+  </node>
+</launch> 

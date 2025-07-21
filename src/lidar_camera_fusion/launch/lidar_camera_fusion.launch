@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- LiDARとカメラのセンサーフュージョンノード -->
+  <node name="lidar_camera_fusion_node" pkg="lidar_camera_fusion" type="fusion_node.py" output="screen">
+    <!-- パラメータ設定 -->
+    <param name="camera_frame_id" value="camera_link" />
+    <param name="lidar_frame_id" value="lidar_link" />
+    
+    <!-- カメラ内部パラメータ -->
+    <param name="camera_fx" value="525.0" />
+    <param name="camera_fy" value="525.0" />
+    <param name="camera_cx" value="319.5" />
+    <param name="camera_cy" value="239.5" />
+    <param name="camera_width" value="640" />
+    <param name="camera_height" value="480" />
+    
+    <!-- トピック設定 -->
+    <remap from="detected_persons" to="/detected_persons" />
+    <remap from="mock_lidar/person_points" to="/mock_lidar/person_points" />
+    <remap from="fused_persons/person_pose" to="/fused_persons/person_pose" />
+  </node>
+</launch> 

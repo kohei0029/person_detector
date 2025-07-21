@@ -2,20 +2,19 @@
 # -*- coding: utf-8 -*-
 
 """
-人物検出ROSノード
-YOLOv5を使用してWEBカメラの映像から人物を検出し、中心座標をパブリッシュする
-CPU版・処理時間表示付き・低ラグ版
+人物検出ROSノード（改修版）
+YOLOv5を使用してWEBカメラの映像から人物を検出し、vision_msgs/Detection2DArrayをパブリッシュする
+CPU負荷削減・10FPS制御・LiDAR統合対応版
 """
 
 import rospy
 import cv2
 import time
 import numpy as np
-import threading
-from collections import deque
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import Point
+from vision_msgs.msg import Detection2D, Detection2DArray, BoundingBox2D, ObjectHypothesisWithPose
+from geometry_msgs.msg import Pose2D, Pose, Point, Quaternion
 from ultralytics import YOLO
 
 class PersonDetectorNode:
@@ -25,10 +24,9 @@ class PersonDetectorNode:
         
         # パラメータの取得（デフォルト値付き）
         self.input_topic = rospy.get_param('~input_topic', '/usb_cam/image_raw')
-        self.output_topic = rospy.get_param('~output_topic', '/detected_person/center_point')
+        self.output_topic = rospy.get_param('~output_topic', '/detected_persons')
         self.confidence_threshold = rospy.get_param('~confidence_threshold', 0.5)
         self.resize_factor = float(rospy.get_param('~resize_factor', 0.5))  # 画像サイズ縮小係数
-        self.enable_display = rospy.get_param('~enable_display', True)  # 表示の有効/無効
         
         # YOLOv5モデルのロード（CPU版）
         rospy.loginfo("YOLOv5sモデルをロード中...")
@@ -43,50 +41,30 @@ class PersonDetectorNode:
         
         # パブリッシャーとサブスクライバーの設定
         self.image_sub = rospy.Subscriber(self.input_topic, Image, self.image_callback, queue_size=1)
-        self.center_pub = rospy.Publisher(self.output_topic, Point, queue_size=1)
+        self.detection_pub = rospy.Publisher(self.output_topic, Detection2DArray, queue_size=1)
         
         # 処理時間とFPSの計算用変数
         self.frame_count = 0
         self.start_time = time.time()
         
-        # 表示用の画像キュー（スレッドセーフ）
-        self.display_queue = deque(maxlen=3)  # 最新3フレームのみ保持
-        self.display_lock = threading.Lock()
+        # フレームレート制御用変数（10FPS = 0.1秒間隔）
+        self.last_processed_time = 0
         
-        # 表示スレッドの開始
-        if self.enable_display:
-            self.display_thread = threading.Thread(target=self.display_worker, daemon=True)
-            self.display_thread.start()
-        
-        rospy.loginfo("人物検出ノードが開始されました")
+        rospy.loginfo("人物検出ノード（改修版）が開始されました")
         rospy.loginfo(f"入力トピック: {self.input_topic}")
         rospy.loginfo(f"出力トピック: {self.output_topic}")
         rospy.loginfo(f"信頼度閾値: {self.confidence_threshold}")
         rospy.loginfo(f"画像縮小係数: {self.resize_factor}")
-        rospy.loginfo(f"表示機能: {'有効' if self.enable_display else '無効'}")
-    
-    def display_worker(self):
-        """表示専用スレッド"""
-        while not rospy.is_shutdown():
-            try:
-                # キューから画像を取得
-                with self.display_lock:
-                    if self.display_queue:
-                        display_image = self.display_queue.popleft()
-                    else:
-                        time.sleep(0.01)  # 10ms待機
-                        continue
-                
-                # 画像を表示
-                cv2.imshow('Person Detection', display_image)
-                cv2.waitKey(1)
-                
-            except Exception as e:
-                rospy.logerr(f"表示処理中にエラーが発生しました: {str(e)}")
-                time.sleep(0.01)
+        rospy.loginfo("フレームレート制御: 10FPS")
+        rospy.loginfo("視覚的デバッグ表示: 無効")
     
     def image_callback(self, msg):
-        """画像コールバック関数：人物検出と中心座標のパブリッシュ"""
+        """画像コールバック関数：人物検出とDetection2DArrayのパブリッシュ"""
+        # フレームレート制御（10FPS）
+        current_time = time.time()
+        if current_time - self.last_processed_time < 0.1:  # 0.1秒未満の場合は処理をスキップ
+            return
+        
         # 処理開始時間を記録
         start_time = time.time()
         
@@ -103,6 +81,12 @@ class PersonDetectorNode:
             
             # YOLOv5モデルで推論を実行（縮小画像で処理）
             results = self.model(resized_image, device='cpu')
+            
+            # Detection2DArrayメッセージを作成
+            detection_array = Detection2DArray()
+            detection_array.header.stamp = rospy.Time.now()
+            detection_array.header.frame_id = msg.header.frame_id
+            detection_array.detections = []  # Initialize detections list
             
             # 人物クラスの検出結果のみを抽出
             person_detections = []
@@ -123,22 +107,49 @@ class PersonDetectorNode:
                             'confidence': box.conf.item()
                         })
             
-            # 検出された人物の中心座標を計算してパブリッシュ
+            # 検出された人物をDetection2Dメッセージに変換
             for person in person_detections:
                 x1, y1, x2, y2 = person['bbox']
                 
-                # バウンディングボックスの中心座標を計算
+                # バウンディングボックスの中心座標とサイズを計算
                 center_x = (x1 + x2) / 2.0
                 center_y = (y1 + y2) / 2.0
+                width = x2 - x1
+                height = y2 - y1
                 
-                # geometry_msgs/Pointメッセージを作成
-                point_msg = Point()
-                point_msg.x = center_x
-                point_msg.y = center_y
-                point_msg.z = 0.0  # 2D画像なのでz座標は0
+                # Detection2Dメッセージを作成
+                detection = Detection2D()
+                detection.header.stamp = rospy.Time.now()
+                detection.header.frame_id = msg.header.frame_id
+                detection.results = []  # Initialize results list
                 
-                # 中心座標をパブリッシュ
-                self.center_pub.publish(point_msg)
+                # バウンディングボックス情報を設定
+                detection.bbox.center.x = center_x
+                detection.bbox.center.y = center_y
+                detection.bbox.size_x = width
+                detection.bbox.size_y = height
+                
+                # 検出結果情報を設定（ポーズ情報付き）
+                hypothesis = ObjectHypothesisWithPose()
+                hypothesis.id = 0  # 人物クラスID
+                hypothesis.score = person['confidence']
+                
+                # ポーズ情報を設定（人物の中心座標）
+                hypothesis.pose.pose.position.x = center_x
+                hypothesis.pose.pose.position.y = center_y
+                hypothesis.pose.pose.position.z = 0.0
+                hypothesis.pose.pose.orientation.x = 0.0
+                hypothesis.pose.pose.orientation.y = 0.0
+                hypothesis.pose.pose.orientation.z = 0.0
+                hypothesis.pose.pose.orientation.w = 1.0
+                
+                detection.results.append(hypothesis)
+                
+                # 検出結果を配列に追加
+                detection_array.detections.append(detection)
+            
+            # Detection2DArrayをパブリッシュ
+            self.detection_pub.publish(detection_array)
             
             # 処理時間とFPSを計算
             end_time = time.time()
@@ -162,44 +173,8 @@ class PersonDetectorNode:
             if person_detections:
                 rospy.loginfo(f"検出された人物数: {len(person_detections)}")
             
-            # 表示用画像の準備（非同期）
-            if self.enable_display:
-                display_image = cv_image.copy()
-                
-                # 検出結果を描画
-                for person in person_detections:
-                    x1, y1, x2, y2 = person['bbox']
-                    center_x = (x1 + x2) / 2.0
-                    center_y = (y1 + y2) / 2.0
-                    
-                    # バウンディングボックスを描画
-                    cv2.rectangle(display_image, 
-                                (int(x1), int(y1)), 
-                                (int(x2), int(y2)), 
-                                (0, 255, 0), 2)
-                    
-                    # 中心点を描画
-                    cv2.circle(display_image, 
-                              (int(center_x), int(center_y)), 
-                              5, (0, 0, 255), -1)
-                    
-                    # 信頼度を表示
-                    cv2.putText(display_image, 
-                               f"Person: {person['confidence']:.2f}", 
-                               (int(x1), int(y1) - 10), 
-                               cv2.FONT_HERSHEY_SIMPLEX, 
-                               0.5, (0, 255, 0), 2)
-                
-                # 処理時間とFPSを表示
-                cv2.putText(display_image, 
-                           f"Time: {processing_time_ms:.1f}ms FPS: {fps:.1f}", 
-                           (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 
-                           0.7, (255, 255, 255), 2)
-                
-                # 表示キューに追加
-                with self.display_lock:
-                    self.display_queue.append(display_image)
+            # フレームレート制御用の時刻を更新
+            self.last_processed_time = current_time
             
         except Exception as e:
             rospy.logerr(f"画像処理中にエラーが発生しました: {str(e)}")
@@ -210,9 +185,6 @@ class PersonDetectorNode:
             rospy.spin()
         except KeyboardInterrupt:
             rospy.loginfo("人物検出ノードを終了します")
-        finally:
-            if self.enable_display:
-                cv2.destroyAllWindows()
 
 if __name__ == '__main__':
     try:
