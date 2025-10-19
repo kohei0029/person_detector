@@ -1,0 +1,51 @@
+# DYNAMIXEL XL330-M288-T configuration for dynamixel-workbench
+# Device configuration
+device_info:
+  device_port: /dev/ttyDXL        # USB port created by udev rule
+  baud_rate: 57600                # Communication speed (default for XL330)
+  protocol_version: 2.0           # Protocol version (2.0 for XL330)
+  
+# Dynamixel motor configuration
+dynamixel_info:
+  motor_id: 1
+  motor_model: xl330-m288
+
+# Control table settings for XL330-M288-T
+control_table:
+  # Operating mode: Position Control (3)
+  Operating_Mode: 3
+  
+  # Torque settings
+  Torque_Enable: 1               # Enable torque on startup
+  
+  # Position and velocity limits
+  Min_Position_Limit: 0          # Minimum position (0 degrees)
+  Max_Position_Limit: 4095       # Maximum position (360 degrees in raw units)
+  
+  # Velocity control
+  Profile_Velocity: 250           # Movement speed (adjustable parameter)
+  Profile_Acceleration: 10       # Acceleration profile
+  
+  # Current limits for safety
+  Current_Limit: 1000            # Maximum current (mA)
+  
+  # Position control gains (PID)
+  Position_P_Gain: 800
+  Position_I_Gain: 0
+  Position_D_Gain: 0
+
+# Additional settings
+settings:
+  # Center position (equivalent to 0 degrees)
+  center_position: 2048          # 2048 = center position for XL330
+  
+  # Conversion factor: XL330 has 4096 positions for 360 degrees
+  # So 1 degree = 4096/360 = 11.378 units (approximately)
+  position_per_degree: 11.378
+  
+  # Movement step size in degrees for keyboard control
+  movement_step: 10              # Move 10 degrees per key press
+  
+  # Position limits in degrees (-180 to +180)
+  min_angle_deg: -180
+  max_angle_deg: 180
